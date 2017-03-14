@@ -384,10 +384,7 @@ namespace Microsoft.Extensions.Caching.Memory
             }
         }
 
-        public void Dispose()
-        {
-            Dispose(true);
-        }
+        public void Dispose() => Dispose(true);
 
         protected virtual void Dispose(bool disposing)
         {

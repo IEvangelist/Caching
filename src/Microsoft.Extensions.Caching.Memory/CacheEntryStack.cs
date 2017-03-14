@@ -16,25 +16,14 @@ namespace Microsoft.Extensions.Caching.Memory
 
         private CacheEntryStack(CacheEntryStack previous, CacheEntry entry)
         {
-            if (previous == null)
-            {
-                throw new ArgumentNullException(nameof(previous));
-            }
-
-            _previous = previous;
+            _previous = previous ?? throw new ArgumentNullException(nameof(previous));
             _entry = entry;
         }
 
         public static CacheEntryStack Empty { get; } = new CacheEntryStack();
 
-        public CacheEntryStack Push(CacheEntry c)
-        {
-            return new CacheEntryStack(this, c);
-        }
+        public CacheEntryStack Push(CacheEntry entry) => new CacheEntryStack(this, entry);
 
-        public CacheEntry Peek()
-        {
-            return _entry;
-        }
+        public CacheEntry Peek() => _entry;
     }
 }

@@ -11,19 +11,20 @@ namespace Microsoft.Extensions.Caching.Memory
 {
     internal class CacheEntry : ICacheEntry
     {
-        private bool _added = false;
         private static readonly Action<object> ExpirationCallback = ExpirationTokensExpired;
         private readonly Action<CacheEntry> _notifyCacheOfExpiration;
         private readonly Action<CacheEntry> _notifyCacheEntryDisposed;
+        private readonly IDisposable _scope;
+
         private IList<IDisposable> _expirationTokenRegistrations;
         private IList<PostEvictionCallbackRegistration> _postEvictionCallbacks;
+        private bool _added;
         private bool _isExpired;
 
         internal IList<IChangeToken> _expirationTokens;
         internal DateTimeOffset? _absoluteExpiration;
         internal TimeSpan? _absoluteExpirationRelativeToNow;
         private TimeSpan? _slidingExpiration;
-        private IDisposable _scope;
 
         internal readonly object _lock = new object();
 
@@ -32,25 +33,9 @@ namespace Microsoft.Extensions.Caching.Memory
             Action<CacheEntry> notifyCacheEntryDisposed,
             Action<CacheEntry> notifyCacheOfExpiration)
         {
-            if (key == null)
-            {
-                throw new ArgumentNullException(nameof(key));
-            }
-
-            if (notifyCacheEntryDisposed == null)
-            {
-                throw new ArgumentNullException(nameof(notifyCacheEntryDisposed));
-            }
-
-            if (notifyCacheOfExpiration == null)
-            {
-                throw new ArgumentNullException(nameof(notifyCacheOfExpiration));
-            }
-
-            Key = key;
-            _notifyCacheEntryDisposed = notifyCacheEntryDisposed;
-            _notifyCacheOfExpiration = notifyCacheOfExpiration;
-
+            Key = key ?? throw new ArgumentNullException(nameof(key));
+            _notifyCacheEntryDisposed = notifyCacheEntryDisposed ?? throw new ArgumentNullException(nameof(notifyCacheEntryDisposed));
+            _notifyCacheOfExpiration = notifyCacheOfExpiration ?? throw new ArgumentNullException(nameof(notifyCacheOfExpiration));
             _scope = CacheEntryHelper.EnterScope(this);
         }
 
@@ -59,14 +44,8 @@ namespace Microsoft.Extensions.Caching.Memory
         /// </summary>
         public DateTimeOffset? AbsoluteExpiration
         {
-            get
-            {
-                return _absoluteExpiration;
-            }
-            set
-            {
-                _absoluteExpiration = value;
-            }
+            get => _absoluteExpiration;
+            set => _absoluteExpiration = value;
         }
 
         /// <summary>
@@ -74,10 +53,7 @@ namespace Microsoft.Extensions.Caching.Memory
         /// </summary>
         public TimeSpan? AbsoluteExpirationRelativeToNow
         {
-            get
-            {
-                return _absoluteExpirationRelativeToNow;
-            }
+            get => _absoluteExpirationRelativeToNow;
             set
             {
                 if (value <= TimeSpan.Zero)
@@ -87,7 +63,6 @@ namespace Microsoft.Extensions.Caching.Memory
                         value,
                         "The relative expiration value must be positive.");
                 }
-
                 _absoluteExpirationRelativeToNow = value;
             }
         }
@@ -98,10 +73,7 @@ namespace Microsoft.Extensions.Caching.Memory
         /// </summary>
         public TimeSpan? SlidingExpiration
         {
-            get
-            {
-                return _slidingExpiration;
-            }
+            get => _slidingExpiration;
             set
             {
                 if (value <= TimeSpan.Zero)
@@ -119,33 +91,13 @@ namespace Microsoft.Extensions.Caching.Memory
         /// Gets the <see cref="IChangeToken"/> instances which cause the cache entry to expire.
         /// </summary>
         public IList<IChangeToken> ExpirationTokens
-        {
-            get
-            {
-                if (_expirationTokens == null)
-                {
-                    _expirationTokens = new List<IChangeToken>();
-                }
-
-                return _expirationTokens;
-            }
-        }
+            => _expirationTokens ?? (_expirationTokens = new List<IChangeToken>());
 
         /// <summary>
         /// Gets or sets the callbacks will be fired after the cache entry is evicted from the cache.
         /// </summary>
         public IList<PostEvictionCallbackRegistration> PostEvictionCallbacks
-        {
-            get
-            {
-                if (_postEvictionCallbacks == null)
-                {
-                    _postEvictionCallbacks = new List<PostEvictionCallbackRegistration>();
-                }
-
-                return _postEvictionCallbacks;
-            }
-        }
+            => _postEvictionCallbacks ?? (_postEvictionCallbacks = new List<PostEvictionCallbackRegistration>());
 
         /// <summary>
         /// Gets or sets the priority for keeping the cache entry in the cache during a
@@ -153,8 +105,14 @@ namespace Microsoft.Extensions.Caching.Memory
         /// </summary>
         public CacheItemPriority Priority { get; set; } = CacheItemPriority.Normal;
 
-        public object Key { get; private set; }
+        /// <summary>
+        /// Gets the key used to identify the cache entry instance.
+        /// </summary>
+        public object Key { get; }
 
+        /// <summary>
+        /// Gets or sets the value of the cache entry. 
+        /// </summary>
         public object Value { get; set; }
 
         internal DateTimeOffset LastAccessed { get; set; }
@@ -173,9 +131,7 @@ namespace Microsoft.Extensions.Caching.Memory
         }
 
         internal bool CheckExpired(DateTimeOffset now)
-        {
-            return _isExpired || CheckForExpiredTime(now) || CheckForExpiredTokens();
-        }
+            => _isExpired || CheckForExpiredTime(now) || CheckForExpiredTokens();
 
         internal void SetExpired(EvictionReason reason)
         {
@@ -245,15 +201,20 @@ namespace Microsoft.Extensions.Caching.Memory
             }
         }
 
-        private static void ExpirationTokensExpired(object obj)
+        private static void ExpirationTokensExpired(object cacheEntry)
         {
             // start a new thread to avoid issues with callbacks called from RegisterChangeCallback
-            Task.Factory.StartNew(state =>
-            {
-                var entry = (CacheEntry)state;
-                entry.SetExpired(EvictionReason.TokenExpired);
-                entry._notifyCacheOfExpiration(entry);
-            }, obj, CancellationToken.None, TaskCreationOptions.DenyChildAttach, TaskScheduler.Default);
+            Task.Factory
+                .StartNew(state =>
+                {
+                    var entry = (CacheEntry)state;
+                    entry.SetExpired(EvictionReason.TokenExpired);
+                    entry._notifyCacheOfExpiration(entry);
+                }, 
+                cacheEntry,
+                CancellationToken.None,
+                TaskCreationOptions.DenyChildAttach,
+                TaskScheduler.Default);
         }
 
         private void DetachTokens()
@@ -277,15 +238,18 @@ namespace Microsoft.Extensions.Caching.Memory
         {
             if (_postEvictionCallbacks != null)
             {
-                Task.Factory.StartNew(state => InvokeCallbacks((CacheEntry)state), this,
-                    CancellationToken.None, TaskCreationOptions.DenyChildAttach, TaskScheduler.Default);
+                Task.Factory
+                    .StartNew(state => InvokeCallbacks((CacheEntry)state),
+                              this,
+                              CancellationToken.None,
+                              TaskCreationOptions.DenyChildAttach,
+                              TaskScheduler.Default);
             }
         }
 
         private static void InvokeCallbacks(CacheEntry entry)
         {
             var callbackRegistrations = Interlocked.Exchange(ref entry._postEvictionCallbacks, null);
-
             if (callbackRegistrations == null)
             {
                 return;

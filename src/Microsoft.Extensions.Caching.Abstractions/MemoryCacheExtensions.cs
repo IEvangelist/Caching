@@ -12,22 +12,19 @@ namespace Microsoft.Extensions.Caching.Memory
 
         public static object Get(this IMemoryCache cache, object key)
         {
-            object value = null;
-            cache.TryGetValue(key, out value);
+            cache.TryGetValue(key, out var value);
             return value;
         }
 
         public static TItem Get<TItem>(this IMemoryCache cache, object key)
         {
-            TItem value;
-            cache.TryGetValue<TItem>(key, out value);
+            cache.TryGetValue(key, out TItem value);
             return value;
         }
 
         public static bool TryGetValue<TItem>(this IMemoryCache cache, object key, out TItem value)
         {
-            object result;
-            if (cache.TryGetValue(key, out result))
+            if (cache.TryGetValue(key, out var result))
             {
                 value = (TItem)result;
                 return true;

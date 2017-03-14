@@ -11,12 +11,10 @@ namespace Microsoft.Extensions.Caching.Memory
     public class MemoryCacheSetAndRemoveTests
     {
         private static IMemoryCache CreateCache()
-        {
-            return new MemoryCache(new MemoryCacheOptions()
+            => new MemoryCache(new MemoryCacheOptions
             {
                 CompactOnMemoryPressure = false,
             });
-        }
 
         [Fact]
         public void GetMissingKeyReturnsFalseOrNull()
@@ -182,8 +180,7 @@ namespace Microsoft.Extensions.Caching.Memory
             {
             }
 
-            int obj;
-            Assert.False(cache.TryGetValue(key, out obj));
+            Assert.False(cache.TryGetValue(key, out int obj));
         }
 
         [Fact]
@@ -202,8 +199,7 @@ namespace Microsoft.Extensions.Caching.Memory
             {
             }
 
-            int obj;
-            Assert.False(cache.TryGetValue(key, out obj));
+            Assert.False(cache.TryGetValue(key, out int obj));
         }
 
         [Fact]
